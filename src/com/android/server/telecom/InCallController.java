@@ -45,7 +45,11 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.VibrationAttributes;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.permission.PermissionManager;
+import android.provider.Settings;
 import android.telecom.CallAudioState;
 import android.telecom.CallEndpoint;
 import android.telecom.Connection;
@@ -97,6 +101,9 @@ public class InCallController extends CallsManagerListenerBase implements
     public static final String NOTIFICATION_TAG = InCallController.class.getSimpleName();
     public static final int IN_CALL_SERVICE_NOTIFICATION_ID = 3;
     private AnomalyReporterAdapter mAnomalyReporter = new AnomalyReporterAdapterImpl();
+
+    private static final VibrationAttributes VIBRATION_INCALL_ATTRIBUTES =
+            new VibrationAttributes.Builder().setUsage(VibrationAttributes.USAGE_ACCESSIBILITY).build();
 
     /**
      * Anomaly Report UUIDs and corresponding error descriptions specific to InCallController.
@@ -1828,6 +1835,17 @@ public class InCallController extends CallsManagerListenerBase implements
                 CallState.toString(oldState), CallState.toString(newState));
         maybeTrackMicrophoneUse(isMuted());
 
+        if ((oldState == CallState.RINGING || oldState == CallState.DIALING) &&
+                (newState == CallState.ACTIVE || newState == CallState.ANSWERED)) {
+            boolean vibrateOnConnect = Settings.System.getInt(mContext.getContentResolver(),
+                "vibrate_on_connect", 0) == 1;
+            if (vibrateOnConnect) vibrate(100, 200, 0);
+        } else if (oldState == CallState.ACTIVE && newState == CallState.DISCONNECTED) {
+            boolean vibrateOnDisconnect = Settings.System.getInt(mContext.getContentResolver(),
+                "vibrate_on_disconnect", 0) == 1;
+            if (vibrateOnDisconnect) vibrate(100, 200, 0);
+        }
+
         // Handle transition to and from local voicemail.  If we start local voicemail for a call,
         // remove it from InCallService tracking.  If we stop local voicemail and go active again,
         // add it back tp the InCallService (ie this is the "pickup voicemail call" usecase).
@@ -1861,6 +1879,17 @@ public class InCallController extends CallsManagerListenerBase implements
             }
         }
         updateCall(call);
+    }
+
+    public void vibrate(int v1, int p1, int v2) {
+        Vibrator vibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
+        if (vibrator != null && vibrator.hasVibrator()) {
+            long[] pattern = new long[] {
+                0, v1, p1, v2
+            };
+            vibrator.vibrate(
+                VibrationEffect.createWaveform(pattern, -1), VIBRATION_INCALL_ATTRIBUTES);
+        }
     }
 
     @Override

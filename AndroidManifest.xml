@@ -72,6 +72,7 @@
     <!-- Used for checking appops permissions with PermissionManager. -->
     <uses-permission android:name="android.permission.UPDATE_APP_OPS_STATS" />
     <uses-permission android:name="android.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <permission android:name="android.permission.BROADCAST_CALLLOG_INFO"
          android:label="Broadcast the call type/duration information"
@@ -92,6 +93,8 @@
     <permission android:name="android.permission.HANDLE_CALL_INTENT"
          android:label="Protects handling the call intent via the TelecomManager API."
          android:protectionLevel="signature|system"/>
+
+    <uses-feature android:name="android.hardware.camera" />
 
     <application android:label="@string/telecommAppLabel"
          android:icon="@mipmap/ic_launcher"

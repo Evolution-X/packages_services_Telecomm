@@ -26,7 +26,9 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.Person;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
+import android.hardware.camera2.CameraManager;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.Ringtone;
@@ -35,6 +37,7 @@ import android.media.RingtoneVibrationUtils;
 import android.media.VolumeShaper;
 import android.media.audio.Flags;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -280,6 +283,9 @@ public class Ringer {
      */
     private CompletableFuture<Void> mBlockOnRingingFuture = null;
 
+    private Handler mTorchHandler;
+    private boolean mIsFlashing;
+
     private InCallTonePlayer mCallWaitingPlayer;
     private RingtoneFactory mRingtoneFactory;
     private AudioManager mAudioManager;
@@ -472,14 +478,6 @@ public class Ringer {
 
             stopCallWaiting();
 
-            final boolean shouldFlash = mRingerAttributes.shouldRingForContact();
-            if (mAccessibilityManagerAdapter != null && shouldFlash) {
-                Log.addEvent(foregroundCall, LogUtils.Events.FLASH_NOTIFICATION_START);
-                getExecutor().execute(() ->
-                        mAccessibilityManagerAdapter.startFlashNotificationSequence(mContext,
-                                1 /* FLASH_REASON_CALL = 1 */));
-            }
-
             Context userContext = null;
             try {
                 userContext = mContext.createContextAsUser(UserHandle.CURRENT, 0 /* flags */);
@@ -501,6 +499,41 @@ public class Ringer {
             boolean useCustomVibrationEffect = false;
 
             mVolumeShaperConfig = null;
+
+            final int torchMode = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.FLASHLIGHT_ON_CALL, 0, UserHandle.USER_CURRENT);
+            boolean shouldFlash = false;
+            if (torchMode != 0) {
+                switch (torchMode) {
+                    case 1: // Flash when ringer is audible
+                        shouldFlash = mRingerAttributes.isRingerAudible();
+                        break;
+                    case 2: // Flash when ringer is not audible
+                        shouldFlash = !mRingerAttributes.isRingerAudible();
+                        break;
+                    case 3: // Flash when entirely silent (no vibration or sound)
+                        shouldFlash = !isVibratorEnabled && !mRingerAttributes.isRingerAudible();
+                        break;
+                    case 4: // Flash always
+                        shouldFlash = true;
+                        break;
+                }
+            }
+
+            boolean ignoreDND = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.FLASHLIGHT_ON_CALL_IGNORE_DND, 0,
+                    UserHandle.USER_CURRENT) == 1;
+            if (!ignoreDND && shouldFlash) { // respect DND
+                int zenMode = Settings.Global.getInt(mContext.getContentResolver(),
+                        Settings.Global.ZEN_MODE, Settings.Global.ZEN_MODE_OFF);
+                shouldFlash = zenMode == Settings.Global.ZEN_MODE_OFF;
+            }
+
+            if (shouldFlash) {
+                synchronized (mLock) {
+                    getTorchHandler().post(new TorchToggler());
+                }
+            }
 
             String vibratorAttrs = String.format("hasVibrator=%b, userRequestsVibrate=%b, "
                             + "ringerMode=%d, isVibratorEnabled=%b",
@@ -791,6 +824,8 @@ public class Ringer {
                     mRingingCall = null;
                 }
                 mRingtonePlayer.stop();
+                mIsFlashing = false;
+                getTorchHandler().removeCallbacksAndMessages(null);
             }
             if (foregroundCall != null && mCrsAudioController != null) {
                 mCrsAudioController.resetCrsAudioVolume(foregroundCall, mRingerAttributes);
@@ -1025,6 +1060,15 @@ public class Ringer {
         return um.isManagedProfile(user.getIdentifier()) && um.isQuietModeEnabled(user);
     }
 
+    private Handler getTorchHandler() {
+        if (mTorchHandler == null) {
+            HandlerThread handlerThread = new HandlerThread("TorchHandler");
+            handlerThread.start();
+            mTorchHandler = new Handler(handlerThread.getLooper());
+        }
+        return mTorchHandler;
+    }
+
     private Executor getLoggedExecutor(String functionName) {
         return new LoggedExecutor(getExecutor(), functionName, null);
     }
@@ -1056,6 +1100,34 @@ public class Ringer {
         } else {
             return false;
         }
+    }
+
+    private static VibrationEffect loadDefaultRingVibrationEffect(
+            Context context,
+            VibrationEffectProxy vibrationEffectProxy,
+            FeatureFlags featureFlags) {
+        Resources resources = TelecomResourceId.getResources(context);
+
+        if (TelecomResourceId.getBoolean(context, "use_simple_vibration_pattern")) {
+            Log.i(TAG, "Using simple default ring vibration.");
+            return createSimpleRingVibration(vibrationEffectProxy);
+        }
+
+        if (featureFlags.useDeviceProvidedSerializedRingerVibration()) {
+            Log.i(TAG, "Device provided serialized ringer vibration is no longer supported; "
+                    + "falling back to simple default ring vibration.");
+            return createSimpleRingVibration(vibrationEffectProxy);
+        }
+
+        Log.i(TAG, "Using pulse default ring vibration.");
+        return vibrationEffectProxy.createWaveform(
+                PULSE_PATTERN, PULSE_AMPLITUDE, REPEAT_VIBRATION_AT);
+    }
+
+    private static VibrationEffect createSimpleRingVibration(
+            VibrationEffectProxy vibrationEffectProxy) {
+        return vibrationEffectProxy.createWaveform(SIMPLE_VIBRATION_PATTERN,
+                FIVE_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
     }
 
     private void updateVibrationPattern() {
@@ -1113,6 +1185,38 @@ public class Ringer {
         } else {
             mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(PULSE_PATTERN,
                     PULSE_AMPLITUDE, REPEAT_VIBRATION_AT);
+        }
+    }
+
+    private class TorchToggler implements Runnable {
+        private CameraManager cameraManager;
+        private int duration;
+        private boolean hasFlash = true;
+
+        public TorchToggler() {
+            cameraManager = (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
+            hasFlash = mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+            duration = 500 / Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.FLASHLIGHT_ON_CALL_RATE, 1, UserHandle.USER_CURRENT);
+        }
+
+        @Override
+        public void run() {
+            if (hasFlash) {
+                mIsFlashing = true;
+                try {
+                    String cameraId = cameraManager.getCameraIdList()[0];
+                    while (mIsFlashing) {
+                        cameraManager.setTorchMode(cameraId, true);
+                        Thread.sleep(duration);
+
+                        cameraManager.setTorchMode(cameraId, false);
+                        Thread.sleep(duration);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 

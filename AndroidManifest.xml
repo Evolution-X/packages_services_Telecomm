@@ -73,6 +73,7 @@
     <uses-permission android:name="android.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST" />
     <uses-permission android:name="android.permission.BIND_LOCAL_VOICEMAIL_SERVICE"/>
     <uses-permission android:name="android.permission.QUERY_AUDIO_VOLUME" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <uses-permission android:name="com.android.telephonycore.permission.TELECOM_UI_ACCESS" />
 
@@ -86,6 +87,8 @@
     <permission android:name="android.permission.HANDLE_CALL_INTENT"
          android:label="Protects handling the call intent via the TelecomManager API."
          android:protectionLevel="signature"/>
+
+    <uses-feature android:name="android.hardware.camera" />
 
     <application android:label="@string/telecommAppLabel"
          android:icon="@mipmap/ic_launcher_phone"

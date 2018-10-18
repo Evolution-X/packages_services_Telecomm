@@ -30,6 +30,7 @@ import android.os.UserManager;
 import android.provider.Settings;
 
 import android.telecom.Log;
+import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -85,20 +86,26 @@ public class RingtoneFactory {
         if (ringtone == null) {
             // Contact didn't specify ringtone or custom Ringtone creation failed. Get default
             // ringtone for user or profile.
-            Context contextToUse = hasDefaultRingtoneForUser(userContext) ? userContext : mContext;
+            int subId = mCallsManager.getPhoneAccountRegistrar()
+                    .getSubscriptionIdForPhoneAccount(incomingCall.getTargetPhoneAccount());
+            int phoneId = SubscriptionManager.getPhoneId(subId);
+            Context contextToUse = hasDefaultRingtoneForUserBySlot(userContext, phoneId)
+                    ? userContext : mContext;
+
             UserManager um = contextToUse.getSystemService(UserManager.class);
             boolean isUserUnlocked = mFeatureFlags.telecomResolveHiddenDependencies()
                     ? um.isUserUnlocked(contextToUse.getUser())
                     : um.isUserUnlocked(contextToUse.getUserId());
             Uri defaultRingtoneUri;
             if (isUserUnlocked) {
-                defaultRingtoneUri = RingtoneManager.getActualDefaultRingtoneUri(contextToUse,
-                        RingtoneManager.TYPE_RINGTONE);
+                defaultRingtoneUri = RingtoneManager.getActualDefaultRingtoneUriBySlot(
+                        contextToUse, RingtoneManager.TYPE_RINGTONE, phoneId);
                 if (defaultRingtoneUri == null) {
                     Log.i(this, "getRingtone: defaultRingtoneUri for user is null.");
                 }
             } else {
-                defaultRingtoneUri = Settings.System.DEFAULT_RINGTONE_URI;
+                defaultRingtoneUri = phoneId == 1 ? Settings.System.DEFAULT_RINGTONE2_URI
+                        : Settings.System.DEFAULT_RINGTONE_URI;
                 if (defaultRingtoneUri == null) {
                     Log.i(this, "getRingtone: Settings.System.DEFAULT_RINGTONE_URI is null.");
                 }
@@ -196,12 +203,14 @@ public class RingtoneFactory {
         return null;
     }
 
-    private boolean hasDefaultRingtoneForUser(Context userContext) {
+    private boolean hasDefaultRingtoneForUserBySlot(Context userContext, int phoneId) {
         if(userContext == null) {
             return false;
         }
+        String ringtoneSetting = phoneId == 1 ? Settings.System.RINGTONE2
+                : Settings.System.RINGTONE;
         return !TextUtils.isEmpty(Settings.System.getStringForUser(userContext.getContentResolver(),
-                Settings.System.RINGTONE, userContext.getUserId()));
+                ringtoneSetting, userContext.getUserId()));
     }
 
     private boolean isWorkContact(Call incomingCall) {

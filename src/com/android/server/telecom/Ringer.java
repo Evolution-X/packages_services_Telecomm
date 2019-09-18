@@ -55,6 +55,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.telecom.LogUtils.EventTimer;
 import com.android.server.telecom.flags.FeatureFlags;
 
+import lineageos.providers.LineageSettings;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -496,6 +498,22 @@ public class Ringer {
                 } else {
                     if (DEBUG_RINGER) {
                         Log.i(this, "Create ringer with custom vibration effect");
+                    }
+                    if (LineageSettings.System.getInt(mContext.getContentResolver(),
+                            LineageSettings.System.INCREASING_RING, 0) != 0) {
+                        float startVolume = LineageSettings.System.getFloat(mContext.getContentResolver(),
+                                LineageSettings.System.INCREASING_RING_START_VOLUME, 0.1f);
+                        int rampUpTime = LineageSettings.System.getInt(mContext.getContentResolver(),
+                                LineageSettings.System.INCREASING_RING_RAMP_UP_TIME, 20);
+                        mVolumeShaperConfig =
+                                new VolumeShaper.Configuration.Builder()
+                                        .setDuration(rampUpTime * 1000)
+                                        .setCurve(
+                                                new float[]{0.f, 1.f},
+                                                new float[]{startVolume, 1.f})
+                                        .setInterpolatorType(
+                                                VolumeShaper.Configuration.INTERPOLATOR_TYPE_LINEAR)
+                                        .build();
                     }
                     // Ramping ringtone is not enabled.
                     useCustomVibrationEffect = true;

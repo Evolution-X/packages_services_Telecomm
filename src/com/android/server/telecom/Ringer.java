@@ -26,6 +26,7 @@ import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.Person;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.media.AudioManager;
@@ -47,6 +48,7 @@ import android.telecom.Log;
 import android.telecom.TelecomManager;
 import android.util.Pair;
 import android.view.accessibility.AccessibilityManager;
+import android.provider.Settings;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.telecom.LogUtils.EventTimer;
@@ -127,6 +129,9 @@ public class Ringer {
 
     private static final int RAMPING_RINGER_VIBRATION_DURATION = 5000;
     private static final int RAMPING_RINGER_DURATION = 10000;
+
+    private int mRampingRingerDuration = -1;  // ramping ringer duration in millisecond
+    private float mRampingRingerStartVolume = 0f;
 
     static {
         // construct complete pulse pattern
@@ -383,6 +388,27 @@ public class Ringer {
                 } else {
                     if (DEBUG_RINGER) {
                         Log.i(this, "Create ringer with custom vibration effect");
+                    }
+                    final ContentResolver cr = mContext.getContentResolver();
+                    if (Settings.System.getInt(cr,
+                            Settings.System.INCREASING_RING, 0) != 0) {
+                        float startVolume = Settings.System.getFloat(cr,
+                                Settings.System.INCREASING_RING_START_VOLUME, 0.1f);
+                        int rampUpTime = Settings.System.getInt(cr,
+                                Settings.System.INCREASING_RING_RAMP_UP_TIME, 20);
+                        if (mVolumeShaperConfig == null
+                            || mRampingRingerDuration != rampUpTime
+                            || mRampingRingerStartVolume != startVolume) {
+                            mVolumeShaperConfig = new VolumeShaper.Configuration.Builder()
+                                .setDuration(rampUpTime * 1000)
+                                .setCurve(new float[] {0.f, 1.f}, new float[] {startVolume, 1.f})
+                                .setInterpolatorType(VolumeShaper.Configuration.INTERPOLATOR_TYPE_LINEAR)
+                                .build();
+                            mRampingRingerDuration = rampUpTime;
+                            mRampingRingerStartVolume = startVolume;
+                        }
+                    } else {
+                        mVolumeShaperConfig = null;
                     }
                     // Ramping ringtone is not enabled.
                     useCustomVibrationEffect = true;

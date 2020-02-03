@@ -29,6 +29,7 @@ import android.app.Person;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.Ringtone;
@@ -154,16 +155,89 @@ public class Ringer {
     }
 
     private static final long[] SIMPLE_VIBRATION_PATTERN = {
-            0, // No delay before starting
-            1000, // How long to vibrate
-            1000, // How long to wait before vibrating again
+        0, // No delay before starting
+        800, // How long to vibrate
+        800, // How long to wait before vibrating again
+    };
+
+    private static final long[] DZZZ_DA_VIBRATION_PATTERN = {
+        0, // No delay before starting
+        500, // How long to vibrate
+        200, // Delay
+        20, // How long to vibrate
+        720, // How long to wait before vibrating again
+    };
+
+    private static final long[] MM_MM_MM_VIBRATION_PATTERN = {
+        0, // No delay before starting
+        300, // How long to vibrate
+        400, // Delay
+        300, // How long to vibrate
+        400, // Delay
+        300, // How long to vibrate
+        1400, // How long to wait before vibrating again
+    };
+
+    private static final long[] DA_DA_DZZZ_VIBRATION_PATTERN = {
+        0, // No delay before starting
+        30, // How long to vibrate
+        80, // Delay
+        30, // How long to vibrate
+        80, // Delay
+        50,  // How long to vibrate
+        180, // Delay
+        600,  // How long to vibrate
+        1050, // How long to wait before vibrating again
+    };
+
+    private static final long[] DA_DZZZ_DA_VIBRATION_PATTERN = {
+        0, // No delay before starting
+        80, // How long to vibrate
+        200, // Delay
+        600, // How long to vibrate
+        150, // Delay
+        20,  // How long to vibrate
+        1050, // How long to wait before vibrating again
+    };
+
+    private static final int[] NINE_ELEMENTS_VIBRATION_AMPLITUDE = {
+        0, // No delay before starting
+        255, // Vibrate full amplitude
+        0, // No amplitude while waiting
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+    };
+
+    private static final int[] SEVEN_ELEMENTS_VIBRATION_AMPLITUDE = {
+        0, // No delay before starting
+        255, // Vibrate full amplitude
+        0, // No amplitude while waiting
+        255,
+        0,
+        255,
+        0,
+    };
+
+    private static final int[] FIVE_ELEMENTS_VIBRATION_AMPLITUDE = {
+        0, // No delay before starting
+        255, // Vibrate full amplitude
+        0, // No amplitude while waiting
+        255,
+        0,
     };
 
     private static final int[] SIMPLE_VIBRATION_AMPLITUDE = {
-            0, // No delay before starting
-            255, // Vibrate full amplitude
-            0, // No amplitude while waiting
+        0, // No delay before starting
+        255, // Vibrate full amplitude
+        0, // No amplitude while waiting
     };
+
+    private SettingsObserver mSettingObserver;
+    private final Handler mH = new Handler();
 
     /**
      * Indicates that vibration should be repeated at element 5 in the {@link #PULSE_AMPLITUDE} and
@@ -282,6 +356,11 @@ public class Ringer {
         mFlags = featureFlags;
         mRingtoneVibrationSupported = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_ringtoneVibrationSettingsSupported);
+
+        mSettingObserver = new SettingsObserver(mH);
+        mContext.getContentResolver().registerContentObserver(
+            Settings.System.getUriFor(Settings.System.RINGTONE_VIBRATION_PATTERN),
+            true, mSettingObserver, UserHandle.USER_CURRENT);
     }
 
     @VisibleForTesting
@@ -921,19 +1000,16 @@ public class Ringer {
         }
     }
 
-    private static VibrationEffect loadDefaultRingVibrationEffect(
+    private VibrationEffect loadDefaultRingVibrationEffect(
             Context context,
             Vibrator vibrator,
             VibrationEffectProxy vibrationEffectProxy,
             FeatureFlags featureFlags) {
-        Resources resources = context.getResources();
 
-        if (resources.getBoolean(R.bool.use_simple_vibration_pattern)) {
-            Log.i(TAG, "Using simple default ring vibration.");
-            return createSimpleRingVibration(vibrationEffectProxy);
-        }
+        updateVibrationPattern();
 
         if (featureFlags.useDeviceProvidedSerializedRingerVibration()) {
+            Resources resources = context.getResources();
             VibrationEffect parsedEffect = loadSerializedDefaultRingVibration(resources, vibrator);
             if (parsedEffect != null) {
                 Log.i(TAG, "Using parsed default ring vibration.");
@@ -955,10 +1031,53 @@ public class Ringer {
                 PULSE_PATTERN, PULSE_AMPLITUDE, REPEAT_VIBRATION_AT);
     }
 
-    private static VibrationEffect createSimpleRingVibration(
+    private VibrationEffect createSimpleRingVibration(
             VibrationEffectProxy vibrationEffectProxy) {
         return vibrationEffectProxy.createWaveform(SIMPLE_VIBRATION_PATTERN,
-                SIMPLE_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+                FIVE_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+    }
+
+    private void updateVibrationPattern() {
+        if (mContext.getResources().getBoolean(R.bool.use_simple_vibration_pattern)) {
+            final int pattern = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.RINGTONE_VIBRATION_PATTERN, 0, UserHandle.USER_CURRENT);
+            switch (pattern) {
+                case 1:
+                    mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(DZZZ_DA_VIBRATION_PATTERN,
+                        FIVE_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+                    break;
+                case 2:
+                    mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(MM_MM_MM_VIBRATION_PATTERN,
+                        SEVEN_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+                    break;
+                case 3:
+                    mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(DA_DA_DZZZ_VIBRATION_PATTERN,
+                        NINE_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+                    break;
+                case 4:
+                    mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(DA_DZZZ_DA_VIBRATION_PATTERN,
+                        SEVEN_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+                    break;
+                default:
+                    mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(SIMPLE_VIBRATION_PATTERN,
+                        SIMPLE_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+                    break;
+            }
+        } else {
+            mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(PULSE_PATTERN,
+                    PULSE_AMPLITUDE, REPEAT_VIBRATION_AT);
+        }
+    }
+
+    private final class SettingsObserver extends ContentObserver {
+        public SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        public void onChange(boolean SelfChange) {
+            updateVibrationPattern();
+        }
     }
 
     public void vibrate(int v1, int p1, int v2) {

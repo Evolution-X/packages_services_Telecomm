@@ -550,6 +550,15 @@ public class Ringer {
                 }
             }
 
+            boolean ignoreDND = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.FLASHLIGHT_ON_CALL_IGNORE_DND, 0,
+                    UserHandle.USER_CURRENT) == 1;
+            if (!ignoreDND && shouldFlash) { // respect DND
+                int zenMode = Settings.Global.getInt(mContext.getContentResolver(),
+                        Settings.Global.ZEN_MODE, Settings.Global.ZEN_MODE_OFF);
+                shouldFlash = zenMode == Settings.Global.ZEN_MODE_OFF;
+            }
+
             if (shouldFlash) {
                 blinkFlashlight();
             }
@@ -1263,7 +1272,7 @@ public class Ringer {
 
         private boolean shouldStop = false;
         private CameraManager cameraManager;
-        private int duration = 500;
+        private int duration;
         private boolean hasFlash = true;
         private Context context;
 
@@ -1275,6 +1284,8 @@ public class Ringer {
         private void init() {
             cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
             hasFlash = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+            duration = 500 / Settings.System.getIntForUser(context.getContentResolver(),
+                    Settings.System.FLASHLIGHT_ON_CALL_RATE, 1, UserHandle.USER_CURRENT);
         }
 
         void stop() {

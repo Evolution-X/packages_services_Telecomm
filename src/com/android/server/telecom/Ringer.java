@@ -297,7 +297,8 @@ public class Ringer {
      */
     private CompletableFuture<Void> mBlockOnRingingFuture = null;
 
-    private TorchToggler torchToggler;
+    private Handler mTorchHandler;
+    private boolean mIsFlashing;
 
     private InCallTonePlayer mCallWaitingPlayer;
     private RingtoneFactory mRingtoneFactory;
@@ -319,7 +320,6 @@ public class Ringer {
     private volatile boolean mIsVibrating = false;
 
     private Handler mHandler = null;
-    private int torchMode;
 
     /**
      * Use lock different from the Telecom sync because ringing process is asynchronous outside that
@@ -402,7 +402,6 @@ public class Ringer {
         mContext.getContentResolver().registerContentObserver(
             Settings.System.getUriFor(Settings.System.CUSTOM_RINGTONE_VIBRATION_PATTERN),
             true, mSettingObserver, UserHandle.USER_CURRENT);
-        torchToggler = new TorchToggler(context);
     }
 
     public void shutdownExecutor() {
@@ -530,7 +529,7 @@ public class Ringer {
                     mSystemSettingsUtil.isRingVibrationEnabled(userContext, mFlags),
                     mAudioManager.getRingerMode(), isVibratorEnabled);
 
-            torchMode = Settings.System.getIntForUser(mContext.getContentResolver(),
+            final int torchMode = Settings.System.getIntForUser(mContext.getContentResolver(),
                 Settings.System.FLASHLIGHT_ON_CALL, 0, UserHandle.USER_CURRENT);
             boolean shouldFlash = false;
             if (torchMode != 0) {
@@ -560,7 +559,9 @@ public class Ringer {
             }
 
             if (shouldFlash) {
-                blinkFlashlight();
+                synchronized (mLock) {
+                    getTorchHandler().post(new TorchToggler());
+                }
             }
 
             if (attributes.isRingerAudible()) {
@@ -740,10 +741,6 @@ public class Ringer {
                 mContext, RingtoneManager.TYPE_RINGTONE));
     }
 
-    private void blinkFlashlight() {
-        torchToggler = new TorchToggler(mContext);
-        torchToggler.execute();
-    }
 
     /**
      * Try to reserve the vibrator for this call, returning false if it's already committed.
@@ -879,7 +876,8 @@ public class Ringer {
             }
 
             mRingtonePlayer.stop();
-            torchToggler.stop();
+            mIsFlashing = false;
+            getTorchHandler().removeCallbacksAndMessages(null);
 
             if (mIsVibrating) {
                 Log.addEvent(mVibratingCall, LogUtils.Events.STOP_VIBRATOR);
@@ -1112,6 +1110,15 @@ public class Ringer {
         return mHandler;
     }
 
+    private Handler getTorchHandler() {
+        if (mTorchHandler == null) {
+            HandlerThread handlerThread = new HandlerThread("TorchHandler");
+            handlerThread.start();
+            mTorchHandler = new Handler(handlerThread.getLooper());
+        }
+        return mTorchHandler;
+    }
+
     private Executor getLoggedExecutor(String functionName) {
         if (mFlags.resolveHiddenDependenciesTwo()) {
             return new LoggedExecutor(getExecutor(), functionName, null);
@@ -1268,36 +1275,25 @@ public class Ringer {
         }
     }
 
-    private class TorchToggler extends AsyncTask {
-
-        private boolean shouldStop = false;
+    private class TorchToggler implements Runnable {
         private CameraManager cameraManager;
         private int duration;
         private boolean hasFlash = true;
-        private Context context;
 
-        public TorchToggler(Context ctx) {
-            this.context = ctx;
-            init();
-        }
-
-        private void init() {
-            cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
-            hasFlash = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
-            duration = 500 / Settings.System.getIntForUser(context.getContentResolver(),
+        public TorchToggler() {
+            cameraManager = (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
+            hasFlash = mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+            duration = 500 / Settings.System.getIntForUser(mContext.getContentResolver(),
                     Settings.System.FLASHLIGHT_ON_CALL_RATE, 1, UserHandle.USER_CURRENT);
         }
 
-        void stop() {
-            shouldStop = true;
-        }
-
         @Override
-        protected Object doInBackground(Object[] objects) {
+        public void run() {
             if (hasFlash) {
+                mIsFlashing = true;
                 try {
                     String cameraId = cameraManager.getCameraIdList()[0];
-                    while (!shouldStop) {
+                    while (mIsFlashing) {
                         cameraManager.setTorchMode(cameraId, true);
                         Thread.sleep(duration);
 
@@ -1308,7 +1304,6 @@ public class Ringer {
                     e.printStackTrace();
                 }
             }
-            return null;
         }
     }
 

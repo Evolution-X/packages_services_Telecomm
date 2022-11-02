@@ -25,8 +25,6 @@ import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.Person;
-import android.database.ContentObserver;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.media.AudioAttributes;
@@ -226,9 +224,6 @@ public class Ringer {
     };
 
     private boolean mUseSimplePattern;
-    private int mVibrationPattern;
-    private SettingsObserver mSettingObserver;
-    private final Handler mH = new Handler();
 
     private static final long[] CALL_CONNECTED_VIBRATION_PATTERN = {
             0, // No delay before starting
@@ -367,18 +362,9 @@ public class Ringer {
         mAccessibilityManagerAdapter = accessibilityManagerAdapter;
         mAnomalyReporter = anomalyReporter;
         mUseSimplePattern = mContext.getResources().getBoolean(R.bool.use_simple_vibration_pattern);
-        mVibrationPattern = Settings.System.getIntForUser(mContext.getContentResolver(),
-            Settings.System.RINGTONE_VIBRATION_PATTERN, 0, UserHandle.USER_CURRENT);
 
-        updateVibrationPattern();
-
-        mSettingObserver = new SettingsObserver(mH);
-        mContext.getContentResolver().registerContentObserver(
-            Settings.System.getUriFor(Settings.System.RINGTONE_VIBRATION_PATTERN),
-            true, mSettingObserver, UserHandle.USER_CURRENT);
-        mContext.getContentResolver().registerContentObserver(
-            Settings.System.getUriFor(Settings.System.CUSTOM_RINGTONE_VIBRATION_PATTERN),
-            true, mSettingObserver, UserHandle.USER_CURRENT);
+        mDefaultVibrationEffect =
+                loadDefaultRingVibrationEffect(mContext, mVibrationEffectProxy, featureFlags);
 
         mIsHapticPlaybackSupportedByDevice =
                 mSystemSettingsUtil.isHapticPlaybackSupported(mContext);
@@ -636,6 +622,7 @@ public class Ringer {
                         // vibrator wasn't reserved. This still triggers the mBlockOnRingingFuture.
                         return;
                     }
+                    updateVibrationPattern();
                     final VibrationEffect vibrationEffect = mDefaultVibrationEffect;
 
                     boolean isUsingAudioCoupledHaptics =
@@ -1072,10 +1059,10 @@ public class Ringer {
     }
 
     private void updateVibrationPattern() {
-        mVibrationPattern = Settings.System.getIntForUser(mContext.getContentResolver(),
-            Settings.System.RINGTONE_VIBRATION_PATTERN, 0, UserHandle.USER_CURRENT);
+        final int pattern = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.RINGTONE_VIBRATION_PATTERN, 0, UserHandle.USER_CURRENT);
         if (mUseSimplePattern) {
-            switch (mVibrationPattern) {
+            switch (pattern) {
                 case 1:
                     mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(DZZZ_DA_VIBRATION_PATTERN,
                         FIVE_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
@@ -1126,16 +1113,6 @@ public class Ringer {
         } else {
             mDefaultVibrationEffect = mVibrationEffectProxy.createWaveform(PULSE_PATTERN,
                     PULSE_AMPLITUDE, REPEAT_VIBRATION_AT);
-        }
-    }
-
-    private final class SettingsObserver extends ContentObserver {
-        public SettingsObserver(Handler handler) {
-            super(handler);
-        }
-        @Override
-        public void onChange(boolean SelfChange) {
-            updateVibrationPattern();
         }
     }
 

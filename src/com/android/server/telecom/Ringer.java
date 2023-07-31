@@ -867,6 +867,8 @@ public class Ringer {
         long[] pattern = new long[] {
             0, v1, p1, v2
         };
-        ((Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE)).vibrate(pattern, -1);
+        ((Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE)).vibrate(
+                VibrationEffect.createWaveform(pattern, -1),
+                VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ACCESSIBILITY));
     }
 }

@@ -48,6 +48,8 @@ import android.os.RemoteException;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.VibrationAttributes;
+import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.telecom.CallAudioState;
@@ -1635,7 +1637,9 @@ public class InCallController extends CallsManagerListenerBase implements
         long[] pattern = new long[] {
             0, v1, p1, v2
         };
-        ((Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE)).vibrate(pattern, -1);
+        ((Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE)).vibrate(
+                VibrationEffect.createWaveform(pattern, -1),
+                VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ACCESSIBILITY));
     }
 
     @Override

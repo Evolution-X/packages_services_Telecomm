@@ -2653,7 +2653,9 @@ public class TelecomServiceImpl {
             Intent intent = new Intent(Intent.ACTION_DIAL_EMERGENCY).setPackage(packageName);
             long token = Binder.clearCallingIdentity();
             try {
-                ResolveInfo resolveInfo = mPackageManager.resolveActivity(intent, 0 /* flags*/);
+                PackageManager pm = mContext.createContextAsUser(Binder.getCallingUserHandle(), 0)
+                        .getPackageManager();
+                ResolveInfo resolveInfo = pm.resolveActivity(intent, 0 /* flags*/);
                 if (resolveInfo == null) {
                     // No matching activity from config, fallback to default platform implementation
                     return null;

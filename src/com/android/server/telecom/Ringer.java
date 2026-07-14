@@ -1141,10 +1141,19 @@ public class Ringer {
                         SEVEN_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
                     break;
                 case 5:
-                    String[] customVib = Settings.System.getStringForUser(
+                    String customVibValue = Settings.System.getStringForUser(
                             mContext.getContentResolver(),
                             Settings.System.CUSTOM_RINGTONE_VIBRATION_PATTERN,
-                            UserHandle.USER_CURRENT).split(",", 3);
+                            UserHandle.USER_CURRENT);
+                    String[] customVib = new String[3];
+                    if (customVibValue != null && !customVibValue.equals("")) {
+                        customVib = customVibValue.split(",", 3);
+                    }
+                    else { // If no value - use default
+                        customVib[0] = "0";
+                        customVib[1] = "800";
+                        customVib[2] = "800";
+                    }
                     long[] vibPattern = {
                         0, // No delay before starting
                         Long.parseLong(customVib[0]), // How long to vibrate

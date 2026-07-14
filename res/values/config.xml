@@ -53,7 +53,7 @@
          When false, the vibration effect serialized in the raw `default_ringtone_vibration_effect`
          resource (under `frameworks/base/core/res/res/raw/`) is used. Devices should overlay this
          value based on the type of vibration hardware they employ. -->
-    <bool name="use_simple_vibration_pattern">false</bool>
+    <bool name="use_simple_vibration_pattern">true</bool>
 
     <!-- Threshold for the X+Y component of gravity needed for the device orientation to be
          classified as being on a user's ear. -->

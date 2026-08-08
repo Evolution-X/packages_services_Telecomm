@@ -146,6 +146,17 @@ public class Ringer {
     private static final int RAMPING_RINGER_DURATION = 10000;
     private static final int OUTGOING_CALL_VIBRATING_DURATION = 100;
 
+    // These keys and values are @hide in the framework and not exposed to the module API surface,
+    // so they are defined locally to avoid referencing the hidden Settings/UserHandle constants.
+    private static final String FLASHLIGHT_ON_CALL = "flashlight_on_call";
+    private static final String FLASHLIGHT_ON_CALL_IGNORE_DND = "flashlight_on_call_ignore_dnd";
+    private static final String FLASHLIGHT_ON_CALL_RATE = "flashlight_on_call_rate";
+    private static final String VIBRATE_ON_CALLWAITING = "vibrate_on_callwaiting";
+    private static final String RINGTONE_VIBRATION_PATTERN = "ringtone_vibration_pattern";
+    private static final String CUSTOM_RINGTONE_VIBRATION_PATTERN = "custom_ringtone_vibration_pattern";
+    private static final String ZEN_MODE = "zen_mode";
+    private static final int ZEN_MODE_OFF = 0;
+
     static {
         // construct complete pulse pattern
         PULSE_PATTERN = new long[PULSE_PRIMING_PATTERN.length + PULSE_RAMPING_PATTERN.length];
@@ -367,7 +378,7 @@ public class Ringer {
         mNotificationManager = notificationManager;
         mAccessibilityManagerAdapter = accessibilityManagerAdapter;
         mAnomalyReporter = anomalyReporter;
-        mUseSimplePattern = mContext.getResources().getBoolean(R.bool.use_simple_vibration_pattern);
+        mUseSimplePattern = TelecomResourceId.getBoolean(mContext, "use_simple_vibration_pattern");
 
         mDefaultVibrationEffect =
                 loadDefaultRingVibrationEffect(mContext, mVibrationEffectProxy, featureFlags);
@@ -500,8 +511,8 @@ public class Ringer {
 
             mVolumeShaperConfig = null;
 
-            final int torchMode = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.FLASHLIGHT_ON_CALL, 0, UserHandle.USER_CURRENT);
+            final int torchMode = Settings.System.getInt(mContext.getContentResolver(),
+                    FLASHLIGHT_ON_CALL, 0);
             boolean shouldFlash = false;
             if (torchMode != 0) {
                 switch (torchMode) {
@@ -520,13 +531,12 @@ public class Ringer {
                 }
             }
 
-            boolean ignoreDND = Settings.System.getIntForUser(mContext.getContentResolver(),
-                    Settings.System.FLASHLIGHT_ON_CALL_IGNORE_DND, 0,
-                    UserHandle.USER_CURRENT) == 1;
+            boolean ignoreDND = Settings.System.getInt(mContext.getContentResolver(),
+                    FLASHLIGHT_ON_CALL_IGNORE_DND, 0) == 1;
             if (!ignoreDND && shouldFlash) { // respect DND
                 int zenMode = Settings.Global.getInt(mContext.getContentResolver(),
-                        Settings.Global.ZEN_MODE, Settings.Global.ZEN_MODE_OFF);
-                shouldFlash = zenMode == Settings.Global.ZEN_MODE_OFF;
+                        ZEN_MODE, ZEN_MODE_OFF);
+                shouldFlash = zenMode == ZEN_MODE_OFF;
             }
 
             if (shouldFlash) {
@@ -794,8 +804,8 @@ public class Ringer {
 
         stopRinging();
 
-        if (Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.VIBRATE_ON_CALLWAITING, 0, UserHandle.USER_CURRENT) == 1) {
+        if (Settings.System.getInt(mContext.getContentResolver(),
+                VIBRATE_ON_CALLWAITING, 0) == 1) {
             vibrate(200, 300, 500);
         }
 
@@ -1131,8 +1141,8 @@ public class Ringer {
     }
 
     private void updateVibrationPattern() {
-        final int pattern = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.RINGTONE_VIBRATION_PATTERN, 0, UserHandle.USER_CURRENT);
+        final int pattern = Settings.System.getInt(mContext.getContentResolver(),
+                RINGTONE_VIBRATION_PATTERN, 0);
         if (mUseSimplePattern) {
             switch (pattern) {
                 case 1:
@@ -1152,10 +1162,9 @@ public class Ringer {
                         SEVEN_ELEMENTS_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
                     break;
                 case 5:
-                    String customVibValue = Settings.System.getStringForUser(
+                    String customVibValue = Settings.System.getString(
                             mContext.getContentResolver(),
-                            Settings.System.CUSTOM_RINGTONE_VIBRATION_PATTERN,
-                            UserHandle.USER_CURRENT);
+                            CUSTOM_RINGTONE_VIBRATION_PATTERN);
                     String[] customVib = new String[3];
                     if (customVibValue != null && !customVibValue.equals("")) {
                         customVib = customVibValue.split(",", 3);
@@ -1196,8 +1205,8 @@ public class Ringer {
         public TorchToggler() {
             cameraManager = (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
             hasFlash = mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
-            duration = 500 / Settings.System.getIntForUser(mContext.getContentResolver(),
-                    Settings.System.FLASHLIGHT_ON_CALL_RATE, 1, UserHandle.USER_CURRENT);
+            duration = 500 / Settings.System.getInt(mContext.getContentResolver(),
+                    FLASHLIGHT_ON_CALL_RATE, 1);
         }
 
         @Override

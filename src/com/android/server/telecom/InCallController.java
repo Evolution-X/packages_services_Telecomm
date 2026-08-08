@@ -1260,6 +1260,11 @@ public class InCallController extends CallsManagerListenerBase implements
     // set to 4 seconds to account for the exceptional case (TONE_CONGESTION).
     private static final int DISCONNECTED_TONE_TIMEOUT = 4000;
 
+    // These keys are @hide in the framework and not exposed to the module API surface, so they are
+    // defined locally to avoid referencing the hidden Settings/UserHandle constants.
+    private static final String VIBRATE_ON_CONNECT = "vibrate_on_connect";
+    private static final String VIBRATE_ON_DISCONNECT = "vibrate_on_disconnect";
+
     private static final int[] LIVE_CALL_STATES = { CallState.ACTIVE, CallState.PULLING,
             CallState.DISCONNECTING };
 
@@ -1837,12 +1842,12 @@ public class InCallController extends CallsManagerListenerBase implements
 
         if ((oldState == CallState.RINGING || oldState == CallState.DIALING) &&
                 (newState == CallState.ACTIVE || newState == CallState.ANSWERED)) {
-            boolean vibrateOnConnect = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.VIBRATE_ON_CONNECT, 0, UserHandle.USER_CURRENT) == 1;
+            boolean vibrateOnConnect = Settings.System.getInt(mContext.getContentResolver(),
+                VIBRATE_ON_CONNECT, 0) == 1;
             if (vibrateOnConnect) vibrate(100, 200, 0);
         } else if (oldState == CallState.ACTIVE && newState == CallState.DISCONNECTED) {
-            boolean vibrateOnDisconnect = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.VIBRATE_ON_DISCONNECT, 0, UserHandle.USER_CURRENT) == 1;
+            boolean vibrateOnDisconnect = Settings.System.getInt(mContext.getContentResolver(),
+                VIBRATE_ON_DISCONNECT, 0) == 1;
             if (vibrateOnDisconnect) vibrate(100, 200, 0);
         }
 

@@ -140,4 +140,5 @@
     <string name="emergencyCall_reject_mmi" msgid="5056319534549705785">"‏لا يمكن الاتصال برموز MMI أثناء إجراء مكالمة طوارئ."</string>
     <string name="noApplications" msgid="1703149220378476198">"ليست هناك تطبيقات يمكنها تنفيذ هذا الإجراء."</string>
     <string name="android_system_label" msgid="2730611410547215779">"‏نظام Android"</string>
+    <string name="handle_restricted">مقيّد</string>
 </resources>
